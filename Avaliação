@@ -1,0 +1,313 @@
+import streamlit as st
+import plotly.graph_objects as go
+import pandas as pd
+
+# ==============================================================================
+# MÓDULO 1: BASE DE CONHECIMENTO COMPORTAMENTAL (O "CÉREBRO" DO ESPECIALISTA)
+# ==============================================================================
+# Em um app real, isso viria de um banco de dados ou arquivo JSON separado.
+# As letras representam: D=Dominância (Executor), I=Influência (Comunicador),
+# S=Estabilidade (Planejador), C=Conformidade (Analista).
+
+QUESTIONS_DB = [
+    # Bloco 1: Foco e Motivação
+    {"q": "Em um projeto novo, sua tendência natural é:",
+     "opts": {"D": "Assumir o comando e focar no resultado final rápido.",
+              "I": "Engajar as pessoas e vender a ideia com entusiasmo.",
+              "S": "Planejar os passos com calma para garantir segurança.",
+              "C": "Analisar os dados e definir os processos com precisão."}},
+    {"q": "O que mais te desmotiva no ambiente de trabalho?",
+     "opts": {"D": "Falta de autonomia e lentidão nas decisões.",
+              "I": "Trabalhar isolado e falta de reconhecimento público.",
+              "S": "Mudanças bruscas constantes e ambientes hostis.",
+              "C": "Falta de regras claras e trabalhos feitos sem qualidade."}},
+    # Bloco 2: Resolução de Problemas e Pressão
+    {"q": "Sob forte pressão e prazo curto, você:",
+     "opts": {"D": "Torna-se mais diretivo, impaciente e foca na ação.",
+              "I": "Tenta usar a persuasão e o otimismo para contornar a crise.",
+              "S": "Tende a ceder para evitar conflito ou trava se não houver roteiro.",
+              "C": "Torna-se excessivamente crítico, rígido e busca os detalhes."}},
+    {"q": "Diante de um conflito na equipe, sua postura é:",
+     "opts": {"D": "Enfrentar diretamente para resolver logo.",
+              "I": "Mediar conversando para manter o clima bom.",
+              "S": "Ouvir todos os lados pacientemente para harmonizar.",
+              "C": "Buscar os fatos e as regras para decidir quem está certo."}},
+    # Bloco 3: Comunicação e Estilo
+    {"q": "Seu estilo de comunicação predominante é:",
+     "opts": {"D": "Direto, objetivo e focado em tarefas.",
+              "I": "Expressivo, entusiasta e focado em histórias.",
+              "S": "Calmo, atencioso e focado em ouvir.",
+              "C": "Preciso, formal e focado em dados/fatos."}},
+    # (Para um teste real, seriam necessárias de 20 a 40 questões para robustez estatística.
+    # Usaremos 5 aqui apenas para demonstração funcional da arquitetura).
+]
+
+# Feedbacks de Alta Precisão para COMBINAÇÕES de perfis.
+# O especialista sabe que ninguém é uma coisa só.
+FEEDBACK_MATRIX = {
+    # Combinações Puras (Raras, quando um perfil é muito mais alto que os outros)
+    "D_PURE": {
+        "title": "O Comandante Natural (Alta Dominância)",
+        "luz": "Você é movido por desafios. Sua capacidade de tomar decisões difíceis rapidamente e sua visão focada em resultados são seus maiores ativos. Você não tem medo de assumir riscos.",
+        "sombra": "Sob estresse, pode ser percebido como autoritário, insensível ou atropelador. Tende a ignorar os sentimentos alheios na busca pela meta.",
+        "acao": "Pratique a escuta ativa antes de decidir. Aprenda a delegar não apenas a tarefa, mas também a autoridade."
+    },
+    "I_PURE": {
+        "title": "O Articulador Carismático (Alta Influência)",
+        "luz": "Sua energia é contagiante. Você tem um dom natural para conectar pessoas, vender ideias e manter o otimismo em alta, mesmo na adversidade.",
+        "sombra": "Pode ter sérias dificuldades com foco, prazos e detalhes. Tende a prometer mais do que consegue entregar pela empolgação do momento.",
+        "acao": "Utilize ferramentas de organização externa (checklists, agendas). Comprometa-se com menos coisas e foque na 'acabativa'."
+    },
+    "S_PURE": {
+        "title": "O Pilar de Sustentação (Alta Estabilidade)",
+        "luz": "Você traz equilíbrio e consistência. Sua lealdade, paciência e capacidade de ouvir fazem de você um membro de equipe indispensável e confiável.",
+        "sombra": "Sua aversão a mudanças e conflitos pode te paralisar. Tem dificuldade em dizer 'não' e pode acumular trabalho para não desagradar.",
+        "acao": "Treine a assertividade. Entenda que a mudança é inevitável e tente focar nos benefícios que ela trará a longo prazo."
+    },
+    "C_PURE": {
+        "title": "O Especialista Preciso (Alta Conformidade)",
+        "luz": "A qualidade é seu sobrenome. Você possui um pensamento analítico estruturado, atenção aos detalhes e um respeito profundo por regras e métodos.",
+        "sombra": "O perfeccionismo pode levar à paralisia por análise. Tende a ser excessivamente crítico consigo e com os outros, focando no erro e não no acerto.",
+        "acao": "Defina o que é 'bom o suficiente' para não perder prazos buscando a perfeição inatingível. Valorize o progresso, não apenas o resultado perfeito."
+    },
+
+    # Combinações Mistas (As mais comuns e ricas)
+    "DI": { # Executor + Comunicador
+        "title": "O Trator Carismático (D+I)",
+        "luz": "Combinação potente de velocidade e persuasão. Você não só quer o resultado rápido, como convence todos a correrem com você.",
+        "sombra": "Altíssimo risco de impulsividade e desorganização. Detalhes e planejamentos longos são sua kryptonita.",
+        "acao": "Você precisa de um 'freio' externo. Associe-se a pessoas com perfil S ou C para cuidar da retaguarda enquanto você abre caminho."
+    },
+    "DC": { # Executor + Analista
+        "title": "O Estrategista Exigente (D+C)",
+        "luz": "Rara combinação de ímpeto para ação com rigor técnico. Você quer resultados rápidos, mas que estejam absolutamente corretos.",
+        "sombra": "Conflito interno constante entre 'fazer rápido' (D) e 'fazer perfeito' (C). Pode ser um líder extremamente exigente e frio.",
+        "acao": "Escolha suas batalhas. Nem toda tarefa exige perfeição (C) e nem toda tarefa exige velocidade máxima (D). Contextualize."
+    },
+    "IS": { # Comunicador + Planejador
+        "title": "O Diplomata Agregador (I+S)",
+        "luz": "Excelente gestor de pessoas. Você tem o carisma para motivar (I) e a paciência para acolher e dar segurança (S).",
+        "sombra": "Dificuldade extrema em tomar decisões impopulares ou demitir. Foge de conflitos a todo custo, o que pode gerar passividade.",
+        "acao": "Entenda que o conflito produtivo é necessário para o crescimento. Não sacrifique o resultado apenas para manter a harmonia superficial."
+    },
+    # (Em um sistema completo, haveria DS, IC, SC e as variações de intensidade)
+    "GENERIC_MIX": {
+        "title": "Perfil Multifacetado",
+        "luz": "Você possui uma distribuição de energia equilibrada entre diferentes fatores, o que te dá flexibilidade de adaptação.",
+        "sombra": "Pode sentir falta de uma direção clara ou mudar de postura dependendo do ambiente, gerando confusão nos outros.",
+        "acao": "Identifique qual 'chapéu' você precisa usar em cada situação. Use sua flexibilidade de forma estratégica, não reativa."
+    }
+}
+
+
+# ==============================================================================
+# MÓDULO 2: FUNÇÕES UTILITÁRIAS E VISUALIZAÇÃO (O "BRAÇO" PYTHON)
+# ==============================================================================
+
+def calculate_profile(answers_map):
+    """Calcula as porcentagens e define os perfis primários."""
+    total = sum(answers_map.values())
+    if total == 0: return None
+    
+    scores_pct = {k: (v / total * 100) for k, v in answers_map.items()}
+    
+    # Ordena os perfis do maior para o menor score
+    sorted_profiles = sorted(scores_pct.items(), key=lambda item: item[1], reverse=True)
+    primary = sorted_profiles[0]
+    secondary = sorted_profiles[1]
+    
+    return scores_pct, primary, secondary
+
+def plot_advanced_radar_chart(scores_pct, primary_profile_code):
+    """
+    Gera um gráfico de radar interativo profissional usando Plotly.
+    O especialista sabe que a visualização é parte do diagnóstico.
+    """
+    # Mapeamento de cores baseado no perfil primário para identidade visual
+    color_map = {"D": "#FF4136", "I": "#FFDC00", "S": "#2ECC40", "C": "#0074D9"}
+    main_color = color_map.get(primary_profile_code, "grey")
+    
+    categories = ['Dominância (D)', 'Influência (I)', 'Estabilidade (S)', 'Conformidade (C)']
+    # A ordem dos dados deve corresponder à ordem das categorias acima
+    values = [scores_pct.get('D',0), scores_pct.get('I',0), scores_pct.get('S',0), scores_pct.get('C',0)]
+
+    fig = go.Figure()
+
+    # Adiciona a área preenchida (o "shape" do perfil)
+    fig.add_trace(go.Scatterpolar(
+        r=values,
+        theta=categories,
+        fill='toself',
+        name='Seu Perfil',
+        line_color=main_color,
+        fillcolor=f"rgba({int(main_color[1:3], 16)}, {int(main_color[3:5], 16)}, {int(main_color[5:7], 16)}, 0.5)",
+        marker=dict(size=8)
+    ))
+
+    # Configuração fina do layout para parecer um instrumento profissional
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 100], # Trava o eixo em 100%
+                tickfont=dict(size=10, color="grey"),
+                gridcolor="lightgrey",
+                tickvals=[20, 40, 60, 80, 100]
+            ),
+            angularaxis=dict(
+                tickfont=dict(size=14, weight="bold"),
+                rotation=90, # Rotaciona para D ficar no topo
+                direction="clockwise",
+                gridcolor="lightgrey"
+            )
+        ),
+        showlegend=False,
+        height=500,
+        margin=dict(l=50, r=50, t=50, b=50),
+        paper_bgcolor="rgba(0,0,0,0)", # Fundo transparente
+    )
+    
+    return fig
+
+def get_expert_feedback(primary_code, secondary_code, primary_score, secondary_score):
+    """Lógica do Especialista para selecionar o melhor feedback da matriz."""
+    
+    # Lógica para definir se é um perfil "Puro" ou "Misto"
+    # Se a diferença entre o 1º e o 2º for grande (>25%), consideramos "Puro"
+    if (primary_score - secondary_score) > 25.0:
+        key = f"{primary_code}_PURE"
+    else:
+        # Se são próximos, cria a chave combinada (ex: "DI", "IS")
+        # Ordena alfabeticamente para garantir que DI seja igual a ID na chave
+        code_list = sorted([primary_code, secondary_code])
+        key = "".join(code_list)
+        
+    # Busca na matriz, se não achar, usa o genérico
+    return FEEDBACK_MATRIX.get(key, FEEDBACK_MATRIX["GENERIC_MIX"])
+
+
+# ==============================================================================
+# MÓDULO 3: A INTERFACE DO USUÁRIO (STREAMLIT)
+# ==============================================================================
+
+st.set_page_config(page_title="Assessment Comportamental Profissional", layout="wide", page_icon="🧠")
+
+# Cabeçalho com toque profissional
+col1, col2 = st.columns([1, 5])
+with col1:
+    st.image("https://cdn-icons-png.flaticon.com/512/2620/2620584.png", width=100) # Ícone genérico de cérebro/análise
+with col2:
+    st.title("Sistema de Análise Comportamental Avançada")
+    st.write("Metodologia baseada em tendências DISC | Análise de Especialista")
+
+st.markdown("---")
+
+# --- Sidebar para Contexto ---
+with st.sidebar:
+    st.header("Instruções ao Avaliado")
+    st.info("""
+    Este não é um teste de certo ou errado. É uma fotografia das suas tendências naturais.
+    
+    Para obter um resultado preciso:
+    1. Responda com quem você **é** hoje, não quem gostaria de ser.
+    2. Não pense muito. A primeira resposta costuma ser a mais real.
+    3. Imagine-se no seu ambiente profissional.
+    """)
+    st.warning("Tempo estimado: 5 minutos")
+
+# --- O Formulário de Assessment ---
+if 'submitted' not in st.session_state:
+    st.session_state.submitted = False
+
+if not st.session_state.submitted:
+    st.subheader("Questionário de Mapeamento")
+    
+    with st.form("assessment_form"):
+        user_responses = {}
+        
+        for i, q_data in enumerate(QUESTIONS_DB):
+            st.markdown(f"##### {i+1}. {q_data['q']}")
+            # Truque para salvar a chave (D,I,S,C) mas mostrar o texto
+            options_display = [f"{k}::{v}" for k, v in q_data['opts'].items()]
+            
+            choice = st.radio(
+                f"Opções questão {i}",
+                options_display,
+                label_visibility="collapsed",
+                key=f"q{i}"
+            )
+            # Extrai só a letra (D,I,S,C) da resposta escolhida
+            user_responses[f"q{i}"] = choice.split("::")[0]
+            st.markdown("---")
+            
+        submit_btn = st.form_submit_button("🚀 Processar Minha Análise Profissional", type="primary")
+        
+        if submit_btn:
+            st.session_state.submitted = True
+            st.session_state.responses = user_responses
+            st.rerun()
+
+# --- A Geração do Relatório (Pós-Submissão) ---
+else:
+    with st.spinner("O especialista está analisando seus dados..."):
+        # 1. Processamento dos Dados
+        scores_raw = {"D": 0, "I": 0, "S": 0, "C": 0}
+        for resp in st.session_state.responses.values():
+            scores_raw[resp] += 1
+            
+        scores_pct, primary_tup, secondary_tup = calculate_profile(scores_raw)
+        
+        # 2. Busca do Feedback Inteligente
+        feedback_data = get_expert_feedback(
+            primary_tup[0], secondary_tup[0], primary_tup[1], secondary_tup[1]
+        )
+        
+        # --- LAYOUT DO RELATÓRIO ---
+        st.success("Análise concluída com sucesso.")
+        
+        # Seção Hero: O Gráfico e os Índices
+        col_graph, col_data = st.columns([3, 2])
+        
+        with col_graph:
+            st.subheader("Sua Geometria Comportamental")
+            # Chama a função de plotagem avançada do Plotly
+            fig = plot_advanced_radar_chart(scores_pct, primary_tup[0])
+            st.plotly_chart(fig, use_container_width=True)
+            
+        with col_data:
+            st.subheader("Índices de Energia")
+            st.write("Como sua energia natural está distribuída:")
+            
+            # Mapeamento de nomes amigáveis
+            names_map = {"D": "Executor (Dominância)", "I": "Comunicador (Influência)", "S": "Planejador (Estabilidade)", "C": "Analista (Conformidade)"}
+            
+            # Exibe barras de progresso para cada perfil
+            for code, pct in scores_pct.items():
+                st.write(f"**{names_map[code]}**: {pct:.1f}%")
+                st.progress(int(pct))
+            
+            st.metric(label="Perfil Predominante", value=names_map[primary_tup[0]])
+
+        st.markdown("---")
+        
+        # Seção de Feedback do Especialista
+        st.header("📋 Laudo do Especialista")
+        st.subheader(f"Diagnóstico: {feedback_data['title']}")
+        
+        with st.expander("🌟 LUZ: Suas Potencialidades Naturais", expanded=True):
+            st.markdown(feedback_data["luz"])
+            
+        with st.expander("🌑 SOMBRA: Seus Pontos Cegos e Riscos sob Pressão", expanded=True):
+            st.markdown(feedback_data["sombra"])
+            
+        with st.expander("🚀 Plano de Ação Imediato (Recomendação do Coach)", expanded=True):
+            st.markdown(f"💡 **Sua tarefa de desenvolvimento:** {feedback_data['acao']}")
+            
+        # Botão para refazer (para testes)
+        if st.button("Realizar Nova Avaliação"):
+            st.session_state.submitted = False
+            st.rerun()
+
+# Rodapé
+st.markdown("---")
+st.caption("Sistema desenvolvido com Python, Streamlit e Plotly. Baseado em modelagem comportamental profissional.")
