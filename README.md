@@ -142,3 +142,4 @@ if st.button("📊 Gerar Avaliação"):
         st.write("•", i)
 
     st.caption("Modelo profissional de avaliação comportamental – Big Five + Estilo de Trabalho")
+
