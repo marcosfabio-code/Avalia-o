@@ -1,9 +1,12 @@
+
 # app.py
 # App de Avaliação Comportamental e Produtividade
 # Stack: Streamlit + Python
 
 import streamlit as st
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 # ==============================
@@ -142,4 +145,3 @@ if st.button("📊 Gerar Avaliação"):
         st.write("•", i)
 
     st.caption("Modelo profissional de avaliação comportamental – Big Five + Estilo de Trabalho")
-
